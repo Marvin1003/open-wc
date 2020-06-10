@@ -4,7 +4,11 @@ function createContentHash(content) {
   return crypto.createHash('md4').update(content).digest('hex');
 }
 
-function cleanImportPath(path) {
+function cleanImportPath(path, publicPath) {
+  if (publicPath) {
+    return publicPath + path;
+  }
+
   if (path.startsWith('/')) {
     return path;
   }

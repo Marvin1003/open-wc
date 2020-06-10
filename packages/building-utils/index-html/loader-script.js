@@ -59,22 +59,23 @@ const entryLoaderCreators = {
 /**
  * @param {EntriesConfig} entries
  * @param {EntriesConfig} legacyEntries
+ * @param {string} publicPath
  */
-function createEntriesLoaderFunction(entries, legacyEntries) {
+function createEntriesLoaderFunction(entries, legacyEntries, publicPath) {
+  const importPath = path => cleanImportPath(path, publicPath);
+
   if (!legacyEntries) {
     return `${entryLoaderCreators[entries.type](
-      entries.files.map(cleanImportPath),
+      entries.files.map(importPath),
       entries.polyfillDynamicImport,
     )};`;
   }
 
   const load = entryLoaderCreators[entries.type](
-    entries.files.map(cleanImportPath),
+    entries.files.map(importPath),
     entries.polyfillDynamicImport,
   );
-  const loadLegacy = entryLoaderCreators[legacyEntries.type](
-    legacyEntries.files.map(cleanImportPath),
-  );
+  const loadLegacy = entryLoaderCreators[legacyEntries.type](legacyEntries.files.map(importPath));
   return `'noModule' in HTMLScriptElement.prototype ? ${load} : ${loadLegacy};`;
 }
 
@@ -92,9 +93,10 @@ function createExecuteLoadEntries(polyfills) {
  * @param {EntriesConfig} entries
  * @param {EntriesConfig} legacyEntries
  * @param {Polyfill[]} polyfills
+ * @param {string} publicPath
  */
-function createEntriesLoader(entries, legacyEntries, polyfills) {
-  const loadEntriesFunction = createEntriesLoaderFunction(entries, legacyEntries);
+function createEntriesLoader(entries, legacyEntries, polyfills, publicPath) {
+  const loadEntriesFunction = createEntriesLoaderFunction(entries, legacyEntries, publicPath);
   const executeLoadEntries = createExecuteLoadEntries(polyfills);
 
   return `
@@ -109,8 +111,9 @@ function createEntriesLoader(entries, legacyEntries, polyfills) {
 /**
  * @param {import('@open-wc/building-utils/index-html/create-index-html').Polyfill[]} polyfills
  * @param {import('@open-wc/building-utils/index-html/create-index-html').PolyfillsConfig} polyfillsConfig
+ * @param {string} publicPath
  */
-function createPolyfillsLoader(polyfills, polyfillsConfig) {
+function createPolyfillsLoader(polyfills, polyfillsConfig, publicPath) {
   if (!polyfills) {
     return '';
   }
@@ -122,7 +125,9 @@ function createPolyfillsLoader(polyfills, polyfillsConfig) {
       return;
     }
 
-    code += `  if (${polyfill.test}) { polyfills.push(loadScript('polyfills/${polyfillFilename(
+    code += `  if (${
+      polyfill.test
+    }) { polyfills.push(loadScript('${publicPath}polyfills/${polyfillFilename(
       polyfill,
       polyfillsConfig,
     )}.js', ${Boolean(polyfill.module)})) }\n`;
@@ -138,14 +143,22 @@ function createPolyfillsLoader(polyfills, polyfillsConfig) {
  * @param {EntriesConfig} legacyEntries
  * @param {import('@open-wc/building-utils/index-html/create-index-html').Polyfill[]} polyfills
  * @param {import('@open-wc/building-utils/index-html/create-index-html').PolyfillsConfig} polyfillsConfig
+ * @param {string} publicPath
  */
-function createLoaderScript(entries, legacyEntries, polyfills, polyfillsConfig, minified = true) {
+function createLoaderScript(
+  entries,
+  legacyEntries,
+  polyfills,
+  polyfillsConfig,
+  minified = true,
+  publicPath,
+) {
   /* eslint-disable prefer-template */
   const code =
     '(function() {' +
     createLoadScriptFunction(entries, legacyEntries, polyfills) +
-    createPolyfillsLoader(polyfills, polyfillsConfig) +
-    createEntriesLoader(entries, legacyEntries, polyfills) +
+    createPolyfillsLoader(polyfills, polyfillsConfig, publicPath) +
+    createEntriesLoader(entries, legacyEntries, polyfills, publicPath) +
     '})();';
 
   return minified ? Terser.minify(code).code : code;
@@ -155,12 +168,19 @@ function createLoaderScript(entries, legacyEntries, polyfills, polyfillsConfig, 
  * Creates a function that only loads polyfills, deferring entry loader to the caller
  * @param {import('@open-wc/building-utils/index-html/create-index-html').Polyfill[]} polyfills
  * @param {import('@open-wc/building-utils/index-html/create-index-html').PolyfillsConfig} polyfillsConfig
+ * @param {string} funcName
+ * @param {string} publicPath
  */
-function createPolyfillsLoaderScript(polyfills, polyfillsConfig, funcName = 'loadPolyfills') {
+function createPolyfillsLoaderScript(
+  polyfills,
+  polyfillsConfig,
+  funcName = 'loadPolyfills',
+  publicPath,
+) {
   return (
     `function ${funcName}() {` +
     loadScriptFunction +
-    createPolyfillsLoader(polyfills, polyfillsConfig) +
+    createPolyfillsLoader(polyfills, polyfillsConfig, publicPath) +
     'return Promise.all(polyfills);\n' +
     '}'
   );

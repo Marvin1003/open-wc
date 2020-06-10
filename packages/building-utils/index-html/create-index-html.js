@@ -70,6 +70,7 @@ const { createContentHash, cleanImportPath, polyfillFilename } = require('./util
  * @property {false|object} minify minify configuration, or false to disable minification
  * @property {string} loader 'inline' | 'external'
  * @property {boolean} preload
+ * @property {string} publicPath in case publicPath is defined in the webpack output options
  */
 
 /** @type {Partial<CreateIndexHTMLConfig>} */
@@ -96,9 +97,10 @@ const defaultConfig = {
  * @param {Polyfill[]} polyfills
  * @param {EntriesConfig} entries
  * @param {boolean} needsLoader
+ * @param {string} publicPath
  * @returns {ASTNode[]}
  */
-function createScripts(polyfillsConfig, polyfills, entries, needsLoader) {
+function createScripts(polyfillsConfig, polyfills, entries, needsLoader, publicPath) {
   /** @type {ASTNode[]} */
   const scripts = [];
 
@@ -125,7 +127,9 @@ function createScripts(polyfillsConfig, polyfills, entries, needsLoader) {
       return;
     }
 
-    const args = { src: `polyfills/${polyfillFilename(polyfill, polyfillsConfig)}.js` };
+    const args = {
+      src: `${publicPath}polyfills/${polyfillFilename(polyfill, polyfillsConfig)}.js`,
+    };
     if (polyfill.nomodule) {
       args.nomodule = '';
     }
@@ -136,7 +140,7 @@ function createScripts(polyfillsConfig, polyfills, entries, needsLoader) {
     entries.files.forEach(entry => {
       scripts.push(
         createScript({
-          src: cleanImportPath(entry),
+          src: cleanImportPath(entry, publicPath),
           type: entries.type === 'module' ? 'module' : undefined,
         }),
       );
@@ -176,6 +180,8 @@ function createIndexHTML(baseIndex, config) {
 
   const firstScript = query(body, predicates.hasTagName('script'));
 
+  const { publicPath = '' } = config;
+
   /** @type {FileResult[]} */
   const files = [];
   const polyfills = getPolyfills(localConfig);
@@ -192,7 +198,13 @@ function createIndexHTML(baseIndex, config) {
     [localConfig.entries, localConfig.legacyEntries].some(c => c && c.type === 'system') ||
     (localConfig.legacyEntries && localConfig.legacyEntries.files.length > 0);
 
-  const scripts = createScripts(localConfig.polyfills, polyfills, localConfig.entries, needsLoader);
+  const scripts = createScripts(
+    localConfig.polyfills,
+    polyfills,
+    localConfig.entries,
+    needsLoader,
+    publicPath,
+  );
   if (firstScript) {
     scripts.forEach(script => {
       insertBefore(body, firstScript, script);
@@ -207,10 +219,18 @@ function createIndexHTML(baseIndex, config) {
     if (localConfig.entries.type === 'module') {
       append(
         head,
-        createElement('link', { rel: 'preload', href, as: 'script', crossorigin: 'anonymous' }),
+        createElement('link', {
+          rel: 'preload',
+          href: publicPath + href,
+          as: 'script',
+          crossorigin: 'anonymous',
+        }),
       );
     } else {
-      append(head, createElement('link', { rel: 'preload', href, as: 'script' }));
+      append(
+        head,
+        createElement('link', { rel: 'preload', href: publicPath + href, as: 'script' }),
+      );
     }
   };
 
@@ -222,6 +242,7 @@ function createIndexHTML(baseIndex, config) {
       polyfills,
       localConfig.polyfills,
       localConfig.loader === 'external',
+      publicPath,
     );
 
     if (localConfig.preload) {

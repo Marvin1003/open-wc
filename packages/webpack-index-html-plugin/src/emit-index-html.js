@@ -60,6 +60,7 @@ function emitIndexHTML(compilation, config, baseIndex, buildResult, legacyBuildR
         ...config,
         entries: { type: 'script', files: entries },
         legacyEntries: legacyEntries ? { type: 'script', files: legacyEntries } : undefined,
+        publicPath: compilation.outputOptions.publicPath,
       });
 
       finalIndexHTML = generateResult.indexHTML;
